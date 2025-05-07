@@ -1,5 +1,12 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  useContext,
+  ReactNode,
+  useRef,
+} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   auth,
   db,
@@ -15,17 +22,20 @@ import {
   query,
   collection,
   where,
-  getDocs
-} from '../firebase';
-import { Router } from 'expo-router';
-import { FirebaseRecaptchaVerifierModal, FirebaseRecaptchaBanner } from 'expo-firebase-recaptcha';
-
+  getDocs,
+} from "../firebase";
+import { Router } from "expo-router";
+import {
+  FirebaseRecaptchaVerifierModal,
+  FirebaseRecaptchaBanner,
+} from "expo-firebase-recaptcha";
+import Constants from "expo-constants";
 // Keys for AsyncStorage
-const USER_AUTH_KEY = '@user_auth';
-const USER_ROLE_KEY = '@user_role';
+const USER_AUTH_KEY = "@user_auth";
+const USER_ROLE_KEY = "@user_role";
 
 interface SignInParams {
-  role: 'user' | 'counselor';
+  role: "user" | "counselor";
   phoneNumber?: string;
   email?: string;
   password?: string;
@@ -57,7 +67,9 @@ export const AuthContext = createContext<AuthContextType>({
   recaptchaVerifier: useRef<FirebaseRecaptchaVerifierModal | null>(null),
 });
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [isCounselor, setIsCounselor] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -75,13 +87,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           phoneNumber: userData.phoneNumber,
         };
         await AsyncStorage.setItem(USER_AUTH_KEY, JSON.stringify(userToStore));
-        await AsyncStorage.setItem(USER_ROLE_KEY, isCounselor ? 'counselor' : 'user');
+        await AsyncStorage.setItem(
+          USER_ROLE_KEY,
+          isCounselor ? "counselor" : "user"
+        );
       } else {
         await AsyncStorage.removeItem(USER_AUTH_KEY);
         await AsyncStorage.removeItem(USER_ROLE_KEY);
       }
     } catch (error) {
-      console.error('Error storing user data:', error);
+      console.error("Error storing user data:", error);
     }
   };
 
@@ -89,12 +104,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const storedUser = await AsyncStorage.getItem(USER_AUTH_KEY);
       const storedRole = await AsyncStorage.getItem(USER_ROLE_KEY);
-      
+
       if (storedUser) {
-        setIsCounselor(storedRole === 'counselor');
+        setIsCounselor(storedRole === "counselor");
       }
     } catch (error) {
-      console.error('Error loading stored user data:', error);
+      console.error("Error loading stored user data:", error);
     }
   };
 
@@ -104,9 +119,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          const counselorDoc = await getDoc(doc(db, 'counselors', firebaseUser.uid));
-          const userIsCounselor = counselorDoc.exists() && counselorDoc.data()?.isVerified;
-          
+          const counselorDoc = await getDoc(
+            doc(db, "counselors", firebaseUser.uid)
+          );
+          const userIsCounselor =
+            counselorDoc.exists() && counselorDoc.data()?.isVerified;
+
           setUser(firebaseUser);
           setIsCounselor(userIsCounselor);
           await storeUserData(firebaseUser, userIsCounselor);
@@ -116,43 +134,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           await storeUserData(null, false);
         }
       } catch (error) {
-        console.error('Error in auth state change:', error);
+        console.error("Error in auth state change:", error);
       } finally {
         setLoading(false);
       }
     });
-    
+
     return () => unsubscribe();
   }, []);
 
   const signIn = async (params: SignInParams, router: Router) => {
     try {
-      if (params.role === 'user' && params.phoneNumber) {
+      if (params.role === "user" && params.phoneNumber) {
         // Phone number sign-in flow
         const confirmation = await verifyPhoneNumber(params.phoneNumber);
-        router.push({ 
-          pathname: '/otp', 
-          params: { 
+        router.push({
+          pathname: "/otp",
+          params: {
             phoneNumber: params.phoneNumber,
-            verificationId: confirmation.verificationId 
-          } 
+            verificationId: confirmation.verificationId,
+          },
         });
-      } else if (params.role === 'counselor' && params.email && params.password) {
+      } else if (
+        params.role === "counselor" &&
+        params.email &&
+        params.password
+      ) {
         // Existing email/password flow
-        const result = await signInWithEmailAndPassword(auth, params.email, params.password);
+        const result = await signInWithEmailAndPassword(
+          auth,
+          params.email,
+          params.password
+        );
         const newUser = result.user;
 
-        const counselorRef = doc(db, 'counselors', newUser.uid);
+        const counselorRef = doc(db, "counselors", newUser.uid);
         const counselorDoc = await getDoc(counselorRef);
-        
+
         if (!counselorDoc.exists()) {
           if (!newUser?.email) {
-            throw new Error('User email is undefined.');
+            throw new Error("User email is undefined.");
           }
-          const sanitizedEmail = newUser.email.replace(/[^a-zA-Z0-9]/g, '');
-          const verifiedRef = doc(db, 'verifiedCounselors', sanitizedEmail);
+          const sanitizedEmail = newUser.email.replace(/[^a-zA-Z0-9]/g, "");
+          const verifiedRef = doc(db, "verifiedCounselors", sanitizedEmail);
           const verifiedDoc = await getDoc(verifiedRef);
-          
+
           if (verifiedDoc.exists()) {
             await setDoc(counselorRef, {
               email: newUser.email,
@@ -161,37 +187,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             });
             setIsCounselor(true);
             await storeUserData(newUser, true);
-            router.push('/counselor-dashboard');
+            router.push("/counselor-dashboard");
           } else {
             await signOut(auth);
-            throw new Error('Email not verified for counselor access.');
+            throw new Error("Email not verified for counselor access.");
           }
         } else {
           const isVerified = counselorDoc.data()?.isVerified;
           if (isVerified) {
             setIsCounselor(true);
             await storeUserData(newUser, true);
-            router.push('/counselor-dashboard');
+            router.push("/counselor-dashboard");
           } else {
             await signOut(auth);
-            throw new Error('Your account is pending verification.');
+            throw new Error("Your account is pending verification.");
           }
         }
       } else {
-        throw new Error('Invalid sign-in parameters.');
+        throw new Error("Invalid sign-in parameters.");
       }
     } catch (error: any) {
-      console.error('Sign-in error:', error);
-      alert(`Sign-in failed: ${error.message || 'Please check your credentials and try again.'}`);
+      console.error("Sign-in error:", error);
+      alert(
+        `Sign-in failed: ${
+          error.message || "Please check your credentials and try again."
+        }`
+      );
     }
   };
 
   const verifyPhoneNumber = async (phoneNumber: string) => {
     try {
       if (!recaptchaVerifier.current) {
-        throw new Error('Recaptcha verifier not ready');
+        throw new Error("Recaptcha verifier not ready");
       }
-      
+
       const phoneProviderOptions = {
         phoneNumber,
       };
@@ -205,8 +235,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       return confirmation;
     } catch (error: any) {
-      console.error('Phone verification error:', error);
-      throw new Error(`Phone verification failed: ${error.message || 'Please try again.'}`);
+      console.error("Phone verification error:", error);
+      throw new Error(
+        `Phone verification failed: ${error.message || "Please try again."}`
+      );
     }
   };
 
@@ -214,53 +246,58 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await signOut(auth);
     } catch (error: any) {
-      console.error('Logout error:', error);
-      alert(`Logout failed: ${error.message || 'An unexpected error occurred.'}`);
+      console.error("Logout error:", error);
+      alert(
+        `Logout failed: ${error.message || "An unexpected error occurred."}`
+      );
     }
   };
 
   const checkPhoneNumber = async (phoneNumber: string): Promise<boolean> => {
     try {
-      const usersQuery = query(collection(db, 'users'), where('phoneNumber', '==', phoneNumber));
+      const usersQuery = query(
+        collection(db, "users"),
+        where("phoneNumber", "==", phoneNumber)
+      );
       const querySnapshot = await getDocs(usersQuery);
       return !querySnapshot.empty;
     } catch (error) {
-      console.error('Error checking phone number:', error);
+      console.error("Error checking phone number:", error);
       return false;
     }
   };
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        isCounselor, 
-        loading, 
-        signIn, 
+    <AuthContext.Provider
+      value={{
+        user,
+        isCounselor,
+        loading,
+        signIn,
         verifyPhoneNumber,
-        logout, 
-        auth, 
+        logout,
+        auth,
         db,
         recaptchaVerifier,
         checkPhoneNumber,
-        
       }}
     >
       {/* Add the reCAPTCHA modal at the root of your provider */}
       <FirebaseRecaptchaVerifierModal
         ref={recaptchaVerifier}
         firebaseConfig={{
-          apiKey: "AIzaSyDJF33f6h3V7H1nJdIqv1NRykTFQDjp2_o",
-          authDomain: "speak-af637.firebaseapp.com",
-          projectId: "speak-af637",
-          storageBucket: "speak-af637.appspot.com",
-          messagingSenderId: "750315747971",
-          appId: "1:750315747971:web:7a70948a84f5b35c9579b6",
-          measurementId: "G-PMVM8CXZS3"
+          apiKey: Constants.expoConfig?.extra?.firebaseApiKey,
+          authDomain: Constants.expoConfig?.extra?.firebaseAuthDomain,
+          projectId: Constants.expoConfig?.extra?.firebaseProjectId,
+          storageBucket: Constants.expoConfig?.extra?.firebaseStorageBucket,
+          messagingSenderId:
+            Constants.expoConfig?.extra?.firebaseMessagingSenderId,
+          appId: Constants.expoConfig?.extra?.firebaseAppId,
+          measurementId: Constants.expoConfig?.extra?.firebaseMeasurementId,
         }}
         title="Prove you're human"
         cancelLabel="Close"
       />
-      
+
       {children}
     </AuthContext.Provider>
   );
@@ -269,7 +306,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

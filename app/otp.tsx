@@ -1,9 +1,9 @@
 // app/otp.tsx
-import React, { useState, useContext,ReactNode, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useContext,useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { AuthContext } from '../contextApi/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { doc, setDoc, getDoc, signInWithPhoneNumber, updateDoc, PhoneAuthProvider, signInWithCredential } from '../firebase';
+import { doc, setDoc, getDoc, updateDoc, PhoneAuthProvider, signInWithCredential } from '../firebase';
 import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 export default function OTPScreen() {
     const [otp, setOtp] = useState<string>('');

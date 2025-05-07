@@ -8,6 +8,15 @@
     "scheme": "talk",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "firebaseApiKey": "@firebase_api_key",
+      "firebaseAuthDomain": "@firebase_auth_domain",
+      "firebaseProjectId": "@firebase_project_id",
+      "firebaseStorageBucket": "@firebase_storage_bucket",
+      "firebaseMessagingSenderId": "@firebase_messaging_sender_id",
+      "firebaseAppId": "@firebase_app_id",
+      "firebaseMeasurementId": "@firebase_measurement_id"
+    },
     "ios": {
       "supportsTablet": true
     },

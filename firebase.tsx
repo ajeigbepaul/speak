@@ -1,17 +1,35 @@
 import { initializeApp } from 'firebase/app';
 // @ts-ignore 
-import { getAuth, initializeAuth, getReactNativePersistence , signInWithPhoneNumber, signInWithEmailAndPassword, Auth, User, ConfirmationResult, signOut,signInWithCredential,PhoneAuthProvider } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence , signInWithPhoneNumber, signInWithEmailAndPassword, Auth, User, ConfirmationResult, signOut,signInWithCredential,PhoneAuthProvider } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore, doc, getDoc,getDocs, setDoc, collection, addDoc, query, where, onSnapshot, orderBy, updateDoc, Firestore,deleteDoc } from 'firebase/firestore';
+import Constants from 'expo-constants';
+// Define types for environment variables
+
+// Throw error if any config value is missing
+const requiredEnvVars = [
+  'firebaseApiKey',
+  'firebaseAuthDomain',
+  'firebaseProjectId',
+  'firebaseStorageBucket',
+  'firebaseMessagingSenderId',
+  'firebaseAppId'
+];
+
+requiredEnvVars.forEach(variable => {
+  if (!Constants.expoConfig?.extra?.[variable]) {
+    throw new Error(`Missing Firebase config: ${variable}`);
+  }
+});
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDJF33f6h3V7H1nJdIqv1NRykTFQDjp2_o",
-  authDomain: "speak-af637.firebaseapp.com",
-  projectId: "speak-af637",
-  storageBucket: "speak-af637.firebasestorage.app",
-  messagingSenderId: "750315747971",
-  appId: "1:750315747971:web:7a70948a84f5b35c9579b6",
-  measurementId: "G-PMVM8CXZS3"
+  apiKey: Constants.expoConfig?.extra?.firebaseApiKey,
+  authDomain: Constants.expoConfig?.extra?.firebaseAuthDomain,
+  projectId: Constants.expoConfig?.extra?.firebaseProjectId,
+  storageBucket: Constants.expoConfig?.extra?.firebaseStorageBucket,
+  messagingSenderId: Constants.expoConfig?.extra?.firebaseMessagingSenderId,
+  appId: Constants.expoConfig?.extra?.firebaseAppId,
+  measurementId: Constants.expoConfig?.extra?.firebaseMeasurementId,
 };
 
 const app = initializeApp(firebaseConfig);
