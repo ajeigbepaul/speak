@@ -10,7 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   auth,
   db,
-  signInWithPhoneNumber,
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   Auth,
   User,
@@ -23,12 +23,10 @@ import {
   collection,
   where,
   getDocs,
+  sendPasswordResetEmail,
 } from "../firebase";
 import { Router } from "expo-router";
-import {
-  FirebaseRecaptchaVerifierModal,
-  FirebaseRecaptchaBanner,
-} from "expo-firebase-recaptcha";
+import NetInfo from '@react-native-community/netinfo';
 import Constants from "expo-constants";
 // Keys for AsyncStorage
 const USER_AUTH_KEY = "@user_auth";
@@ -36,22 +34,21 @@ const USER_ROLE_KEY = "@user_role";
 
 interface SignInParams {
   role: "user" | "counselor";
-  phoneNumber?: string;
   email?: string;
   password?: string;
 }
 
+// Update AuthContextType
 interface AuthContextType {
   user: User | null;
   isCounselor: boolean;
   loading: boolean;
   signIn: (params: SignInParams, router: Router) => Promise<void>;
-  verifyPhoneNumber: (phoneNumber: string) => Promise<any>;
-  checkPhoneNumber: (phoneNumber: string) => Promise<boolean>;
+  signUp: (email: string, password: string) => Promise<User>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   auth: Auth;
   db: Firestore;
-  recaptchaVerifier: React.RefObject<FirebaseRecaptchaVerifierModal | null>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -59,12 +56,13 @@ export const AuthContext = createContext<AuthContextType>({
   isCounselor: false,
   loading: true,
   signIn: async () => {},
-  verifyPhoneNumber: async () => {},
-  checkPhoneNumber: async () => false,
+  signUp: async (email: string, password: string) => {
+    throw new Error("signUp function not implemented.");
+  },
   logout: async () => {},
+  resetPassword: async () => {},
   auth,
   db,
-  recaptchaVerifier: useRef<FirebaseRecaptchaVerifierModal | null>(null),
 });
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
@@ -73,7 +71,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [isCounselor, setIsCounselor] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   // Store user data in AsyncStorage
   const storeUserData = async (userData: User | null, isCounselor: boolean) => {
@@ -84,7 +81,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
           email: userData.email,
           displayName: userData.displayName,
           photoURL: userData.photoURL,
-          phoneNumber: userData.phoneNumber,
         };
         await AsyncStorage.setItem(USER_AUTH_KEY, JSON.stringify(userToStore));
         await AsyncStorage.setItem(
@@ -143,24 +139,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     return () => unsubscribe();
   }, []);
 
-  const signIn = async (params: SignInParams, router: Router) => {
+ 
+
+   // Add this new signUp function
+  const signUp = async (email: string, password: string): Promise<User> => {
+   
     try {
-      if (params.role === "user" && params.phoneNumber) {
-        // Phone number sign-in flow
-        const confirmation = await verifyPhoneNumber(params.phoneNumber);
-        router.push({
-          pathname: "/otp",
-          params: {
-            phoneNumber: params.phoneNumber,
-            verificationId: confirmation.verificationId,
-          },
-        });
-      } else if (
-        params.role === "counselor" &&
-        params.email &&
-        params.password
-      ) {
-        // Existing email/password flow
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Create user document in Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        email,
+        createdAt: new Date(),
+        role: 'user' // Explicit role designation
+      });
+      
+      return user;
+    } catch (error: any) {
+      console.error("Sign up error:", error);
+      throw error;
+    }
+  };
+const checkNetwork = async () => {
+  const state = await NetInfo.fetch();
+  if (!state.isConnected) {
+    throw new Error("No internet connection");
+  }
+};
+  // Update the signIn function
+  const signIn = async (params: SignInParams, router: Router) => {
+     await checkNetwork();
+    try {
+      if (params.role === "counselor" && params.email && params.password) {
+        // Existing counselor flow
         const result = await signInWithEmailAndPassword(
           auth,
           params.email,
@@ -203,42 +215,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
             throw new Error("Your account is pending verification.");
           }
         }
+      } else if (params.role === "user" && params.email && params.password) {
+        // New user email/password flow
+        const result = await signInWithEmailAndPassword(
+          auth,
+          params.email,
+          params.password
+        );
+        const user = result.user;
+        
+        // Check if this is a counselor trying to access user area
+        const counselorDoc = await getDoc(doc(db, "counselors", user.uid));
+        if (counselorDoc.exists()) {
+          await signOut(auth);
+          throw new Error("Counselors must sign in through the counselor portal.");
+        }
+        
+        await storeUserData(user, false);
+        router.push("/user-home");
       } else {
         throw new Error("Invalid sign-in parameters.");
       }
     } catch (error: any) {
       console.error("Sign-in error:", error);
-      alert(
-        `Sign-in failed: ${
-          error.message || "Please check your credentials and try again."
-        }`
-      );
-    }
-  };
-
-  const verifyPhoneNumber = async (phoneNumber: string) => {
-    try {
-      if (!recaptchaVerifier.current) {
-        throw new Error("Recaptcha verifier not ready");
-      }
-
-      const phoneProviderOptions = {
-        phoneNumber,
-      };
-
-      // This will trigger the recaptcha modal automatically
-      const confirmation = await signInWithPhoneNumber(
-        auth,
-        phoneNumber,
-        recaptchaVerifier.current
-      );
-
-      return confirmation;
-    } catch (error: any) {
-      console.error("Phone verification error:", error);
-      throw new Error(
-        `Phone verification failed: ${error.message || "Please try again."}`
-      );
+      throw error; // Let the calling component handle the error
     }
   };
 
@@ -253,51 +253,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  const checkPhoneNumber = async (phoneNumber: string): Promise<boolean> => {
-    try {
-      const usersQuery = query(
-        collection(db, "users"),
-        where("phoneNumber", "==", phoneNumber)
-      );
-      const querySnapshot = await getDocs(usersQuery);
-      return !querySnapshot.empty;
-    } catch (error) {
-      console.error("Error checking phone number:", error);
-      return false;
-    }
+  // Password reset
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email);
   };
+  // In your AuthContext implementation
+
   return (
-    <AuthContext.Provider
+     <AuthContext.Provider
       value={{
         user,
         isCounselor,
         loading,
         signIn,
-        verifyPhoneNumber,
+        signUp,
         logout,
+        resetPassword,
         auth,
-        db,
-        recaptchaVerifier,
-        checkPhoneNumber,
+        db
       }}
     >
-      {/* Add the reCAPTCHA modal at the root of your provider */}
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={{
-          apiKey: Constants.expoConfig?.extra?.firebaseApiKey,
-          authDomain: Constants.expoConfig?.extra?.firebaseAuthDomain,
-          projectId: Constants.expoConfig?.extra?.firebaseProjectId,
-          storageBucket: Constants.expoConfig?.extra?.firebaseStorageBucket,
-          messagingSenderId:
-            Constants.expoConfig?.extra?.firebaseMessagingSenderId,
-          appId: Constants.expoConfig?.extra?.firebaseAppId,
-          measurementId: Constants.expoConfig?.extra?.firebaseMeasurementId,
-        }}
-        title="Prove you're human"
-        cancelLabel="Close"
-      />
-
       {children}
     </AuthContext.Provider>
   );

@@ -44,9 +44,9 @@ function NavigationContent({ colorScheme }: { colorScheme: "light" | "dark" }) {
           name="counselor-signin"
           options={{ title: "Counselor Sign In", headerShown: false }}
         />
-        <Stack.Screen
-          name="otp"
-          options={{ title: "Enter OTP", headerShown: false }}
+         <Stack.Screen
+          name="counselor-signup"
+          options={{ title: "Counselor Sign Up", headerShown: false }}
         />
         <Stack.Screen name="user-home" options={{ title: 'Your Posts', headerShown: false }} />
       </Stack>

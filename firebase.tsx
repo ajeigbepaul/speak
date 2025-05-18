@@ -1,8 +1,9 @@
 import { initializeApp } from 'firebase/app';
 // @ts-ignore 
-import { initializeAuth, getReactNativePersistence , signInWithPhoneNumber, signInWithEmailAndPassword, Auth, User, ConfirmationResult, signOut,signInWithCredential,PhoneAuthProvider } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence, sendPasswordResetEmail, signInWithPhoneNumber, signInWithEmailAndPassword, createUserWithEmailAndPassword, Auth, User, ConfirmationResult, signOut,signInWithCredential,PhoneAuthProvider } from 'firebase/auth';
+import { getStorage,ref,uploadBytes,getDownloadURL } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getFirestore, doc, getDoc,getDocs, setDoc, collection, addDoc, query, where, onSnapshot, orderBy, updateDoc, Firestore,deleteDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc,getDocs, limit, startAfter, setDoc, collection, addDoc, query, where, onSnapshot, orderBy, updateDoc, Firestore,deleteDoc,DocumentSnapshot, serverTimestamp } from 'firebase/firestore';
 import Constants from 'expo-constants';
 // Define types for environment variables
 
@@ -33,12 +34,14 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+console.log("Firebase initialized successfully");
 // Use standard getAuth for Expo managed workflow
 // const auth = getAuth(app);
 // Initialize Auth with AsyncStorage persistence
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage)
 });
+ console.log("Auth service initialized");
 const db = getFirestore(app);
 
 // Set persistence to IndexedDB in Web, and to AsyncStorage in native with a manual implementation if needed
@@ -50,6 +53,8 @@ export {
   db,
   signInWithPhoneNumber,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   Auth,
   User,
   signOut,
@@ -67,7 +72,15 @@ export {
   orderBy,
   updateDoc,
   deleteDoc,
+  limit,
+  startAfter,
   signInWithCredential,
+  serverTimestamp,
   PhoneAuthProvider,
-  Firestore
+  Firestore,
+  DocumentSnapshot,
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
 };
