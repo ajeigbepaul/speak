@@ -1,9 +1,9 @@
 import { initializeApp } from 'firebase/app';
 // @ts-ignore 
 import { initializeAuth, getReactNativePersistence, sendPasswordResetEmail, signInWithPhoneNumber, signInWithEmailAndPassword, createUserWithEmailAndPassword, Auth, User, ConfirmationResult, signOut,signInWithCredential,PhoneAuthProvider } from 'firebase/auth';
-import { getStorage,ref,uploadBytes,getDownloadURL } from 'firebase/storage';
+import { getStorage,ref,uploadBytes,getDownloadURL,deleteObject } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getFirestore, doc, getDoc,getDocs, limit, startAfter, setDoc, collection, addDoc, query, where, onSnapshot, orderBy, updateDoc, Firestore,deleteDoc,DocumentSnapshot, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, getDoc,getDocs, limit, startAfter, setDoc, collection, addDoc, query, where, onSnapshot, orderBy, updateDoc, Firestore,deleteDoc,DocumentSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore';
 import Constants from 'expo-constants';
 // Define types for environment variables
 
@@ -83,4 +83,5 @@ export {
   ref,
   uploadBytes,
   getDownloadURL,
+  writeBatch
 };

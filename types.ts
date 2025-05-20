@@ -1,5 +1,6 @@
 // types.ts
 export interface Post {
+    archived: any;
     id: string;
     userId: string;
     category: string;
