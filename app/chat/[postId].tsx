@@ -32,13 +32,13 @@ import {
   uploadBytes,
   writeBatch,
 } from "../../firebase";
-// import { format } from 'date-fns';
 import ChatHeader from "@/components/ChatHeader";
 import { formatDate } from "@/utils/formateDate";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import { deleteObject } from "firebase/storage";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Message {
@@ -65,10 +65,11 @@ export default function ChatScreen() {
   const typingTimeoutRef = useRef<number | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const router = useRouter();
-  const [counselorProfilePicUrl, setProfilePicUrl] = useState<
-    string | undefined
-  >(undefined);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [counselorProfilePicUrl, setProfilePicUrl] = useState<string | undefined>(undefined);
   const insets = useSafeAreaInsets();
+  const shouldScrollToEnd = useRef(true);
+
   // Fetch post details and validate counselor access
   useEffect(() => {
     const fetchPost = async () => {
@@ -128,7 +129,6 @@ export default function ChatScreen() {
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        // shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
         shouldShowBanner: true,
@@ -152,7 +152,10 @@ export default function ChatScreen() {
       })) as Message[];
 
       // Detect new incoming message from other user
-      if (messages.length > 0 && messagesData.length > messages.length) {
+      if (
+        messages.length > 0 &&
+        messagesData.length > messages.length
+      ) {
         const lastMsg = messagesData[messagesData.length - 1];
         if (lastMsg.senderId !== user?.uid) {
           Notifications.scheduleNotificationAsync({
@@ -169,14 +172,18 @@ export default function ChatScreen() {
       setMessages(messagesData);
       setLoading(false);
 
-      // Scroll to bottom when new messages arrive
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      // Only scroll to end if shouldScrollToEnd is true (initial load or after sending)
+      if (shouldScrollToEnd.current) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+        shouldScrollToEnd.current = false;
+      }
     });
 
     return unsubscribe;
-  }, [postId, messages, user?.uid, otherUser?.displayName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postId, user?.uid, otherUser?.displayName]);
 
   // Mark messages as read
   useEffect(() => {
@@ -200,8 +207,6 @@ export default function ChatScreen() {
   const handleTyping = (text: string) => {
     setNewMessage(text);
 
-    // Implement typing indicator logic here
-    // (Would require a separate Firestore document to track typing status)
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     setIsTyping(true);
@@ -221,26 +226,7 @@ export default function ChatScreen() {
     });
   };
 
-  // fetch counselor profile picture
-  // useEffect(() => {
-  //   const fetchCounselorProfile = async () => {
-  //     if (!user?.uid) return;
-  //     try {
-  //       const docRef = doc(db, "counselors", user.uid);
-  //       const docSnap = await getDoc(docRef);
-  //       if (docSnap.exists()) {
-  //         const data = docSnap.data();
-  //         setProfilePicUrl(data?.personalInfo?.profilePic);
-  //       }
-  //     } catch (error) {
-  //       console.error("Failed to fetch counselor profile:", error);
-  //     }
-  //   };
-  //   fetchCounselorProfile();
-  // }, [user]);
-
-  // Fetch participants (counselor and user) details
-  // and set their profile pictures
+  // Fetch participants (counselor and user) details and set their profile pictures
   useEffect(() => {
     const fetchParticipants = async () => {
       try {
@@ -258,15 +244,10 @@ export default function ChatScreen() {
 
         // Determine if current user is the counselor or the client
         const isCounselor = user?.uid === postData.acceptedBy;
-        console.log("isCounselor", isCounselor);
-        console.log("user", user);
-        console.log("otherUser", otherUser);
 
         // Fetch the other participant's details
         const otherUserId = isCounselor ? postData.userId : postData.acceptedBy;
-        console.log("otherUserId", otherUserId);
         const collectionName = isCounselor ? "users" : "counselors";
-        console.log("collectionName", collectionName);
         const otherUserRef = doc(db, collectionName, otherUserId);
         const otherUserSnap = await getDoc(otherUserRef);
 
@@ -296,7 +277,7 @@ export default function ChatScreen() {
 
     fetchParticipants();
   }, [postId, user?.uid]);
-  // console.log("profilePicUrl", counselorProfilePicUrl);
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user?.uid || !postId) return;
 
@@ -317,10 +298,23 @@ export default function ChatScreen() {
       });
       await sendNotification(newMessage);
       setNewMessage("");
-      
+      // After sending, scroll to end
+      shouldScrollToEnd.current = true;
     } catch (error) {
       console.error("Error sending message:", error);
       Alert.alert("Error", "Failed to send message");
+    }
+  };
+
+  // Handle scroll events
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const isAtBottom =
+      contentOffset.y + layoutMeasurement.height >= contentSize.height - 100;
+    setIsNearBottom(isAtBottom);
+    // If user scrolls up, don't auto-scroll to end anymore
+    if (!isAtBottom) {
+      shouldScrollToEnd.current = false;
     }
   };
 
@@ -392,33 +386,28 @@ export default function ChatScreen() {
 
     setIsUploading(true);
     try {
-      // In a real app, you would:
-      // 1. Upload to Firebase Storage
-      // 1. Upload to Firebase Storage
       const storage = getStorage();
       const fileRef = ref(
         storage,
         `chatFiles/${postId}/${Date.now()}_${file.name}`
       );
-      // Fetch the file as a blob
       const response = await fetch(file.uri);
       const blob = await response.blob();
       await uploadBytes(fileRef, blob);
-      // 2. Get download URL
       const downloadUrl = await getDownloadURL(fileRef);
-      // 3. Save message with file metadata
 
       const messagesRef = collection(db, "posts", postId, "messages");
       await setDoc(doc(messagesRef), {
         type: "file",
         fileName: file.name,
-        fileUrl: downloadUrl, // Replace with actual URL
+        fileUrl: downloadUrl,
         senderId: user?.uid,
         createdAt: serverTimestamp(),
         read: false,
       });
 
       await sendNotification(`Sent a file: ${file.name}`);
+      shouldScrollToEnd.current = true;
     } catch (error) {
       console.error("Upload error:", error);
       Alert.alert("Error", "Failed to upload file");
@@ -430,8 +419,6 @@ export default function ChatScreen() {
   const uploadImage = async (uri: string) => {
     setIsUploading(true);
     try {
-      // Similar to file upload but for images
-      // 1. Upload image to Firebase Storage
       const storage = getStorage();
       const imageName = `chatImages/${postId}/${Date.now()}.jpg`;
       const imageRef = ref(storage, imageName);
@@ -440,19 +427,19 @@ export default function ChatScreen() {
       const blob = await response.blob();
       await uploadBytes(imageRef, blob);
 
-      // 2. Get download URL
       const downloadUrl = await getDownloadURL(imageRef);
 
       const messagesRef = collection(db, "posts", postId, "messages");
       await setDoc(doc(messagesRef), {
         type: "image",
-        fileUrl: downloadUrl, // Replace with actual URL
+        fileUrl: downloadUrl,
         senderId: user?.uid,
         createdAt: serverTimestamp(),
         read: false,
       });
 
       await sendNotification("Sent an image");
+      shouldScrollToEnd.current = true;
     } catch (error) {
       console.error("Upload error:", error);
       Alert.alert("Error", "Failed to upload image");
@@ -463,7 +450,6 @@ export default function ChatScreen() {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isCurrentUser = item.senderId === user?.uid;
-    //  console.log("item", item);
     if (!item) return null;
     return (
       <View className={`mb-4 ${isCurrentUser ? "items-end" : "items-start"}`}>
@@ -502,8 +488,13 @@ export default function ChatScreen() {
                 : "bg-gray-200 rounded-bl-none"
             }`}
             onPress={() => {
-              /* Open file */
+              // Open file
+              if (item.fileUrl) {
+                // You can use Linking.openURL(item.fileUrl) if you want
+              }
             }}
+            onLongPress={() => handleDeleteMessage(item)}
+            activeOpacity={0.8}
           >
             <Feather
               name="file"
@@ -535,12 +526,14 @@ export default function ChatScreen() {
             </View>
           </TouchableOpacity>
         ) : (
-          <View
+          <TouchableOpacity
             className={`max-w-[80%] rounded-lg p-3 ${
               isCurrentUser
                 ? "bg-blue-500 rounded-br-none"
                 : "bg-gray-200 rounded-bl-none"
             }`}
+            onLongPress={() => handleDeleteMessage(item)}
+            activeOpacity={0.8}
           >
             <Text className={isCurrentUser ? "text-white" : "text-gray-800"}>
               {item.text}
@@ -570,13 +563,11 @@ export default function ChatScreen() {
                 />
               )}
             </View>
-          </View>
+          </TouchableOpacity>
         )}
       </View>
     );
   };
-
-  
 
   if (loading || !post) {
     return (
@@ -619,7 +610,7 @@ export default function ChatScreen() {
           className="flex-1"
           keyboardVerticalOffset={Platform.select({
             ios: 100,
-            android: insets.bottom + 100, // Account for Android navigation bar
+            android: insets.bottom + 100,
           })}
         >
           <FlatList
@@ -627,11 +618,13 @@ export default function ChatScreen() {
             data={messages}
             renderItem={renderMessage}
             keyExtractor={(item) => item.id}
-            className="flex-1 p-4"
-            contentContainerStyle={{ paddingBottom: 20 }}
-            onContentSizeChange={() =>
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
+            contentContainerStyle={{
+              paddingTop: 16,
+              paddingBottom: 80 + insets.bottom,
+            }}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            className="px-4"
             ListEmptyComponent={
               <View className="flex-1 justify-center items-center mt-20">
                 <Feather name="message-square" size={48} color="#e5e7eb" />
@@ -683,7 +676,6 @@ export default function ChatScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
-        {/* Messages List */}
       </KeyboardAvoidingView>
     </View>
   );
